@@ -1,0 +1,38 @@
+services:
+  mongo:
+    image: mongo:7.0
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: security_intelligence
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - pipeline-net
+
+  vulnerability-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vulnerability-pipeline:latest
+    depends_on:
+      - mongo
+    env_file:
+      - .env
+    environment:
+      WORKING_DIRECTORY: /app/downloads
+      MONGO_URI: mongodb://mongo:27017/security_intelligence
+      MONGO_DATABASE: security_intelligence
+    volumes:
+      - ./downloads:/app/downloads
+    networks:
+      - pipeline-net
+    restart: "no"
+
+networks:
+  pipeline-net:
+    driver: bridge
+
+volumes:
+  mongo-data:

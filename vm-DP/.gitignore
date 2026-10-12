@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.id_rsa
+GCP SSH KEYS/
+logs/
+*.log
+extracted_json/
+archives/
+downloaded_zips/
+.DS_Store

@@ -1,0 +1,113 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: vmt-mongodb
+    restart: unless-stopped
+    ports:
+      - "${MONGODB_PORT:-27017}:27017"
+    environment:
+      MONGO_INITDB_DATABASE: ${PLATFORM_DB_NAME:-security_platform}
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - vmt-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: vmt-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_WEB_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    networks:
+      - vmt-network
+
+  backend:
+    build:
+      context: ./vm-backend
+      dockerfile: Dockerfile
+    container_name: vmt-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      DATABASE_URL: mongodb://mongodb:27017
+      PLATFORM_DB_NAME: ${PLATFORM_DB_NAME:-security_platform}
+      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:-security_intelligence}
+      TENANT_DB_PREFIX: ${TENANT_DB_PREFIX:-security_tenant_}
+      DATABASE_NAME: ${PLATFORM_DB_NAME:-security_platform}
+      CORS_ORIGIN: http://localhost:3000,http://127.0.0.1:3000
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_with_at_least_32_characters_long!}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_FROM: ${SMTP_FROM:-noreply@vmt.local}
+      COOKIE_SECURE: "false"
+      COOKIE_SAME_SITE: lax
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    networks:
+      - vmt-network
+
+  frontend:
+    build:
+      context: ./vm-app
+      dockerfile: Dockerfile
+    container_name: vmt-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      INTERNAL_BACKEND_URL: http://backend:5000
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:5000
+      NEXT_PUBLIC_TRUSTED_API_ORIGINS: http://localhost:5000,http://localhost:3000,http://backend:5000
+    depends_on:
+      - backend
+    networks:
+      - vmt-network
+
+  data-processing:
+    build:
+      context: ./vm-DP
+      dockerfile: Dockerfile
+    container_name: vmt-data-processing
+    profiles:
+      - pipeline
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      WORKING_DIRECTORY: /app/downloads
+      MONGO_URI: mongodb://mongodb:27017/${INTELLIGENCE_DB_NAME:-security_intelligence}
+      MONGO_DATABASE: ${INTELLIGENCE_DB_NAME:-security_intelligence}
+      ENRICHMENT_BATCH_SIZE: 1000
+      ANALYTICS_BATCH_SIZE: 1000
+      VENDOR_FEED_TIMEOUT: 30
+    volumes:
+      - dp_downloads:/app/downloads
+    networks:
+      - vmt-network
+    restart: "no"
+
+networks:
+  vmt-network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+  dp_downloads:

@@ -1,0 +1,292 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Enterprise Vulnerability Management Platform API",
+    "version": "1.0.0",
+    "description": "Multi-tenant enterprise security exposure platform providing automated SBOM ingestion, vulnerability matching, contextual risk evaluation, asset exposure tracking, and role-based governance."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "StandardError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": "array", "items": { "type": "object" } }
+            },
+            "required": ["code", "message"]
+          }
+        }
+      },
+      "PaginationMetadata": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" },
+          "total": { "type": "integer" }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string" }
+        }
+      },
+      "Asset": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "tenantId": { "type": "string" },
+          "projectId": { "type": "string", "nullable": true },
+          "name": { "type": "string" },
+          "displayName": { "type": "string" },
+          "type": { "type": "string", "enum": ["REPOSITORY", "CONTAINER_IMAGE", "HOST", "CLOUD_RESOURCE", "PACKAGE", "SERVICE"] },
+          "criticality": { "type": "string", "enum": ["TIER_1_CRITICAL", "TIER_2_HIGH", "TIER_3_MEDIUM", "TIER_4_LOW"] },
+          "environment": { "type": "string", "enum": ["PRODUCTION", "STAGING", "DEVELOPMENT", "TEST"] },
+          "internetFacing": { "type": "boolean" },
+          "stats": { "type": "object" },
+          "isActive": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ScanFinding": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "tenantId": { "type": "string" },
+          "scanId": { "type": "string" },
+          "cveId": { "type": "string" },
+          "status": { "type": "string", "enum": ["OPEN", "TRIAGED", "IN_PROGRESS", "MITIGATED", "RESOLVED", "FALSE_POSITIVE", "ACCEPTED_RISK", "REOPENED"] },
+          "risk": {
+            "type": "object",
+            "properties": {
+              "score": { "type": "number" },
+              "severity": { "type": "string" },
+              "policyId": { "type": "string" },
+              "explanation": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Platform Health Check",
+        "responses": {
+          "200": {
+            "description": "Health status",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "Authenticate user credentials and receive JWT session",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Authenticated successfully" },
+          "400": { "$ref": "#/components/schemas/StandardError" },
+          "401": { "$ref": "#/components/schemas/StandardError" }
+        }
+      }
+    },
+    "/api/v1/scans": {
+      "post": {
+        "summary": "Upload and submit SBOM for asynchronous security scan",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "202": { "description": "Scan queued successfully" }
+        }
+      },
+      "get": {
+        "summary": "List tenant scans",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "List of scans" }
+        }
+      }
+    },
+    "/api/v1/findings": {
+      "get": {
+        "summary": "List all tenant findings with filtering",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "List of findings" }
+        }
+      }
+    },
+    "/api/v1/findings/{findingId}/status": {
+      "patch": {
+        "summary": "Update finding lifecycle status with state-machine validation",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "findingId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Status transitioned successfully" },
+          "400": { "$ref": "#/components/schemas/StandardError" }
+        }
+      }
+    },
+    "/api/v1/assets": {
+      "get": {
+        "summary": "List tenant assets",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "List of assets" }
+        }
+      },
+      "post": {
+        "summary": "Register new asset in inventory",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "201": { "description": "Asset created" }
+        }
+      }
+    },
+    "/api/v1/dashboard/summary": {
+      "get": {
+        "summary": "Retrieve role-based security exposure dashboard summary",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Dashboard summary statistics" }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "summary": "Rotate refresh token and issue new access token",
+        "responses": {
+          "200": { "description": "Tokens refreshed" },
+          "401": { "$ref": "#/components/schemas/StandardError" }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "summary": "Revoke current session and clear authentication cookies",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Logged out successfully" }
+        }
+      }
+    },
+    "/api/v1/auth/preferences": {
+      "get": {
+        "summary": "Get authenticated user preferences",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "User preferences returned" }
+        }
+      },
+      "put": {
+        "summary": "Update user notification preferences",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Preferences saved successfully" }
+        }
+      }
+    },
+    "/api/v1/tenant/assets": {
+      "get": {
+        "summary": "List tenant assets",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "List of assets" }
+        }
+      },
+      "post": {
+        "summary": "Create new tenant asset",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "201": { "description": "Asset onboarded" }
+        }
+      }
+    },
+    "/api/v1/tenant/projects": {
+      "get": {
+        "summary": "List tenant enterprise projects",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "List of projects" }
+        }
+      },
+      "post": {
+        "summary": "Create new enterprise project",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "201": { "description": "Project created" }
+        }
+      }
+    },
+    "/api/v1/tenant/users": {
+      "get": {
+        "summary": "List users in tenant",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "List of users" }
+        }
+      },
+      "post": {
+        "summary": "Provision end user in tenant",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "201": { "description": "User created" }
+        }
+      }
+    },
+    "/api/v1/platform/tenants": {
+      "get": {
+        "summary": "List all tenants (Platform Admin only)",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "List of tenants" }
+        }
+      },
+      "post": {
+        "summary": "Provision new tenant and super admin",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "201": { "description": "Tenant created" }
+        }
+      }
+    },
+    "/api/v1/scans/{scanId}/export/sbom": {
+      "post": {
+        "summary": "Export scan components and findings as CycloneDX or SPDX",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "scanId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "SBOM exported" }
+        }
+      }
+    }
+  }
+}

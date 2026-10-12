@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.log
+.env
+.git/
+.gitignore
+downloads/
+nvd_feeds/
+mitre-cves/
+osv-zips/
+extracted_json/
+epss_score.csv.gz
+epss_score.metadata
